@@ -10,12 +10,6 @@ PoP Monitor é um dashboard de performance em tempo real desenvolvido para ISPs,
 
 ---
 
-## 📸 Preview
-
-> Dashboard rodando com métricas ao vivo de latência, jitter, CPU e RAM.
-
----
-
 ## ✨ Funcionalidades
 
 - **CPU, RAM e Disco** — uso em tempo real com histórico em gráfico
@@ -38,6 +32,8 @@ PoP Monitor é um dashboard de performance em tempo real desenvolvido para ISPs,
 
 ## 🚀 Instalação
 
+### 🐧 Linux / 🍎 macOS
+
 ```bash
 # 1. Clone o repositório
 git clone https://github.com/rafahalav/pop-monitor.git
@@ -45,8 +41,7 @@ cd pop-monitor
 
 # 2. Crie o ambiente virtual
 python3 -m venv .venv
-source .venv/bin/activate        # Linux/macOS
-# .venv\Scripts\activate         # Windows
+source .venv/bin/activate
 
 # 3. Instale as dependências
 pip install -r requirements.txt
@@ -55,11 +50,31 @@ pip install -r requirements.txt
 python3 pop_monitor_api.py
 ```
 
-Ou use o script de inicialização (Linux/macOS):
+Ou use o script de inicialização:
 
 ```bash
 chmod +x iniciar.sh
 ./iniciar.sh
+```
+
+---
+
+### 🪟 Windows
+
+```bash
+# 1. Clone o repositório
+git clone https://github.com/rafahalav/pop-monitor.git
+cd pop-monitor
+
+# 2. Crie o ambiente virtual
+python -m venv .venv
+.venv\Scripts\activate
+
+# 3. Instale as dependências
+pip install -r requirements.txt
+
+# 4. Inicie
+python pop_monitor_api.py
 ```
 
 ---
@@ -123,7 +138,7 @@ pop-monitor/
 
 ## 🤝 Contribuindo
 
-Pull requests são bem-vindos! Para mudanças maiores, abra uma issue primeiro para discutir o que você gostaria de alterar.
+Pull requests são bem-vindos! Para mudanças maiores, abra uma issue primeiro.
 
 1. Fork o projeto
 2. Crie sua branch (`git checkout -b feature/MinhaFeature`)
