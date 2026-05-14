@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PoP Monitor — Dashboard de Performance</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+
+  :root {
+    --bg:      #0f1117;
+    --surface: #1a1d27;
+    --border:  rgba(255,255,255,0.07);
+    --text:    #e8eaf0;
+    --muted:   #7a7f9a;
+    --blue:    #378ADD;
+    --green:   #1D9E75;
+    --amber:   #EF9F27;
+    --red:     #E24B4A;
+    --purple:  #9F77DD;
+    --cyan:    #22D3EE;
+    --pink:    #F472B6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 0.5px solid var(--border);
+    background: var(--surface); position: sticky; top: 0; z-index: 10;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { width: 36px; height: 36px; background: var(--blue); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; }
+  .logo-icon svg { width: 20px; height: 20px; }
+  .logo-name { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-sub  { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 7px; font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace; padding: 5px 14px; border-radius: 20px;
+    border: 0.5px solid rgba(29,158,117,0.4); background: rgba(29,158,117,0.08);
+    color: #5DCAA5; transition: all 0.4s;
+  }
+  .status-pill.err { border-color: rgba(226,75,74,0.4); background: rgba(226,75,74,0.08); color: #F09595; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  .status-pill.err .pulse { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+  .top-right { text-align: right; }
+  .clock   { font-size: 15px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .top-sub { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
+  .container { max-width: 1340px; margin: 0 auto; padding: 24px 28px; }
+  .section-label {
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px;
+  }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px,1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi {
+    background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; position: relative; overflow: hidden; transition: border-color 0.3s;
+  }
+  .kpi:hover { border-color: rgba(255,255,255,0.14); }
+  .kpi::before {
+    content:''; position:absolute; left:0; top:16px; bottom:16px;
+    width:2.5px; border-radius:0 2px 2px 0; background: var(--accent, var(--blue));
+  }
+  .kpi-label { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 8px; padding-left: 6px; }
+  .kpi-val   { font-size: 24px; font-weight: 700; letter-spacing: -1px; line-height: 1; padding-left: 6px; }
+  .kpi-unit  { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+  .kpi-sub   { font-size: 10px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 5px; padding-left: 6px; }
+  .kpi-bar   { height: 2.5px; border-radius: 2px; background: rgba(255,255,255,0.05); margin-top: 10px; overflow: hidden; }
+  .kpi-fill  { height: 100%; border-radius: 2px; transition: width 0.7s ease; }
+
+  .quality-badge {
+    display: inline-block; font-size: 9px; font-family: 'IBM Plex Mono', monospace;
+    padding: 2px 7px; border-radius: 10px; margin-left: 6px; vertical-align: middle; letter-spacing: 0.5px;
+  }
+  .q-excelente { background: rgba(29,158,117,0.2); color: #5DCAA5; }
+  .q-bom       { background: rgba(55,138,221,0.2); color: #7BBFEF; }
+  .q-regular   { background: rgba(239,159,39,0.2); color: #F5C878; }
+  .q-ruim      { background: rgba(226,75,74,0.2); color: #F09595; }
+
+  .charts-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .charts-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+  .chart-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .chart-sub   { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace; margin-bottom: 10px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .ld { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  .proc-table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  .proc-table th { color: var(--muted); font-weight: 400; text-align: left; padding: 4px 0 8px; font-size: 10px; letter-spacing: 0.5px; }
+  .proc-table td { padding: 5px 0; border-top: 0.5px solid var(--border); color: var(--text); }
+  .proc-table td:last-child, .proc-table th:last-child { text-align: right; }
+
+  .detail-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0;
+    border-bottom: 0.5px solid var(--border); font-family: 'IBM Plex Mono', monospace; }
+  .detail-row:last-child { border-bottom: none; }
+  .dl { color: var(--muted); } .dv { color: var(--text); font-weight: 500; }
+
+  .error-box {
+    background: rgba(226,75,74,0.08); border: 0.5px solid rgba(226,75,74,0.3);
+    border-radius: 10px; padding: 14px 18px; color: #F09595;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-bottom: 20px; display: none;
+  }
+
+  @media (max-width: 1000px) {
+    .charts-2, .charts-3 { grid-template-columns: 1fr; }
+    .container { padding: 16px; } .topbar { padding: 12px 16px; }
+    .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 20 20" fill="none">
+        <rect x="2" y="3"   width="16" height="3.5" rx="1" fill="white" opacity="0.9"/>
+        <rect x="2" y="8.5" width="16" height="3.5" rx="1" fill="white" opacity="0.6"/>
+        <rect x="2" y="14"  width="16" height="3.5" rx="1" fill="white" opacity="0.3"/>
+        <circle cx="15.5" cy="4.75"  r="1.2" fill="#5DCAA5"/>
+        <circle cx="15.5" cy="10.25" r="1.2" fill="#EF9F27"/>
+        <circle cx="15.5" cy="15.75" r="1.2" fill="#5DCAA5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-name">PoP Monitor</div>
+      <div class="logo-sub">server performance monitor</div>
+    </div>
+  </div>
+  <div class="status-pill" id="status-pill">
+    <div class="pulse"></div>
+    <span id="status-text">conectando...</span>
+  </div>
+  <div class="top-right">
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="top-sub" id="last-update">aguardando dados...</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="error-box" id="error-box">
+    ⚠ Não foi possível conectar à API. Certifique-se de que <strong>tr_server_api.py</strong> está em execução:<br>
+    <code style="opacity:.75;font-size:11px;">source ~/tr-venv/bin/activate && python3 tr_server_api.py</code>
+  </div>
+
+  <!-- KPIs sistema -->
+  <div style="margin-bottom:20px">
+    <div class="section-label">sistema · em tempo real</div>
+    <div class="kpi-grid">
+      <div class="kpi" style="--accent:#378ADD">
+        <div class="kpi-label">CPU</div>
+        <div class="kpi-val" id="v-cpu">--<span class="kpi-unit">%</span></div>
+        <div class="kpi-sub" id="s-cpu">aguardando...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-cpu" style="width:0%;background:#378ADD"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#9F77DD">
+        <div class="kpi-label">Memória RAM</div>
+        <div class="kpi-val" id="v-ram">--<span class="kpi-unit">%</span></div>
+        <div class="kpi-sub" id="s-ram">aguardando...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-ram" style="width:0%;background:#9F77DD"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#EF9F27">
+        <div class="kpi-label">Disco /</div>
+        <div class="kpi-val" id="v-disk">--<span class="kpi-unit">%</span></div>
+        <div class="kpi-sub" id="s-disk">aguardando...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-disk" style="width:0%;background:#EF9F27"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#1D9E75">
+        <div class="kpi-label">Uptime</div>
+        <div class="kpi-val" id="v-up">--<span class="kpi-unit">h</span></div>
+        <div class="kpi-sub" id="s-up">aguardando...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-up" style="width:100%;background:#1D9E75"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#185FA5">
+        <div class="kpi-label">Entrada (rede)</div>
+        <div class="kpi-val" id="v-ni">--<span class="kpi-unit">Gbps</span></div>
+        <div class="kpi-sub" id="s-ni">aguardando...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-ni" style="width:0%;background:#185FA5"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#1D9E75">
+        <div class="kpi-label">Saída (rede)</div>
+        <div class="kpi-val" id="v-no">--<span class="kpi-unit">Gbps</span></div>
+        <div class="kpi-sub" id="s-no">aguardando...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-no" style="width:0%;background:#1D9E75"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs qualidade de rede -->
+  <div style="margin-bottom:20px">
+    <div class="section-label">qualidade de rede · <span id="ping-host-label">--</span></div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+      <div class="kpi" style="--accent:#22D3EE">
+        <div class="kpi-label">Latência atual</div>
+        <div class="kpi-val" id="v-lat">--<span class="kpi-unit">ms</span></div>
+        <div class="kpi-sub" id="s-lat">aguardando ping...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-lat" style="width:0%;background:#22D3EE"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#F472B6">
+        <div class="kpi-label">Jitter atual</div>
+        <div class="kpi-val" id="v-jit">--<span class="kpi-unit">ms</span></div>
+        <div class="kpi-sub" id="s-jit">aguardando ping...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-jit" style="width:0%;background:#F472B6"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#22D3EE">
+        <div class="kpi-label">Latência mín / máx</div>
+        <div class="kpi-val" id="v-lat-mm">--<span class="kpi-unit">ms</span></div>
+        <div class="kpi-sub" id="s-lat-mm">aguardando amostras...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-lat-mm" style="width:0%;background:#22D3EE"></div></div>
+      </div>
+      <div class="kpi" style="--accent:#F472B6">
+        <div class="kpi-label">Jitter médio / máx</div>
+        <div class="kpi-val" id="v-jit-mm">--<span class="kpi-unit">ms</span></div>
+        <div class="kpi-sub" id="s-jit-mm">aguardando amostras...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="b-jit-mm" style="width:0%;background:#F472B6"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gráficos CPU + RAM -->
+  <div class="charts-2">
+    <div class="chart-card">
+      <div class="chart-title">CPU — histórico</div>
+      <div class="chart-sub">últimas amostras · aviso 80%</div>
+      <div class="legend">
+        <span><span class="ld" style="background:#378ADD"></span>cpu %</span>
+        <span><span class="ld" style="background:#EF9F27;opacity:.7"></span>aviso 80%</span>
+      </div>
+      <div style="position:relative;height:140px"><canvas id="cpuChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">RAM — histórico</div>
+      <div class="chart-sub">últimas amostras · crítico 90%</div>
+      <div class="legend">
+        <span><span class="ld" style="background:#9F77DD"></span>ram %</span>
+        <span><span class="ld" style="background:#E24B4A;opacity:.7"></span>crítico 90%</span>
+      </div>
+      <div style="position:relative;height:140px"><canvas id="ramChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Gráficos Latência + Jitter + Rede -->
+  <div class="charts-3">
+    <div class="chart-card">
+      <div class="chart-title">Latência — histórico</div>
+      <div class="chart-sub">RTT em ms · <span id="lat-samples">0</span> amostras</div>
+      <div class="legend">
+        <span><span class="ld" style="background:#22D3EE"></span>latência ms</span>
+        <span><span class="ld" style="background:#EF9F27;opacity:.7"></span>aviso 80ms</span>
+      </div>
+      <div style="position:relative;height:140px"><canvas id="latChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Jitter — histórico</div>
+      <div class="chart-sub">variação de RTT entre pings</div>
+      <div class="legend">
+        <span><span class="ld" style="background:#F472B6"></span>jitter ms</span>
+        <span><span class="ld" style="background:#E24B4A;opacity:.7"></span>crítico 20ms</span>
+      </div>
+      <div style="position:relative;height:140px"><canvas id="jitChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Tráfego de rede</div>
+      <div class="chart-sub">entrada e saída em Gbps</div>
+      <div class="legend">
+        <span><span class="ld" style="background:#185FA5"></span>entrada</span>
+        <span><span class="ld" style="background:#1D9E75"></span>saída</span>
+      </div>
+      <div style="position:relative;height:140px"><canvas id="netChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Bottom -->
+  <div class="charts-3">
+    <div class="chart-card">
+      <div class="chart-title">Disco — partição /</div>
+      <div class="chart-sub" style="margin-bottom:12px">dados reais do sistema</div>
+      <div id="disk-details"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Rede — estatísticas</div>
+      <div class="chart-sub" style="margin-bottom:12px">desde o último boot</div>
+      <div id="net-details"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Top processos por CPU</div>
+      <div class="chart-sub" style="margin-bottom:12px">leitura ao vivo</div>
+      <table class="proc-table">
+        <thead><tr><th>processo</th><th>cpu%</th><th>ram%</th></tr></thead>
+        <tbody id="proc-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── URL da API — funciona local E quando acessado via rede ────────
+const API = `${location.protocol}//${location.hostname}:5050/metrics`;
+const INTERVAL = 4500;
+
+// ── Helpers ───────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const setVal = (id, html) => $(id).innerHTML = html;
+const setBar = (id, pct, color) => {
+  const el = $(id);
+  el.style.width = Math.min(Math.max(pct,0),100)+'%';
+  if (color) el.style.background = color;
+};
+const barColor = p => p>=90?'#E24B4A':p>=75?'#EF9F27':'#1D9E75';
+const latColor = ms => ms===null?'#22D3EE':ms>200?'#E24B4A':ms>80?'#EF9F27':'#22D3EE';
+const jitColor = ms => ms===null?'#F472B6':ms>20?'#E24B4A':ms>10?'#EF9F27':'#F472B6';
+const qualityBadge = ms => {
+  if (ms===null) return '';
+  if (ms<=30)  return '<span class="quality-badge q-excelente">excelente</span>';
+  if (ms<=80)  return '<span class="quality-badge q-bom">bom</span>';
+  if (ms<=200) return '<span class="quality-badge q-regular">regular</span>';
+  return '<span class="quality-badge q-ruim">ruim</span>';
+};
+const mkLabels = n => Array.from({length:n},(_,i)=>'#'+(i+1));
+const detailRows = pairs => pairs.map(([l,v])=>
+  `<div class="detail-row"><span class="dl">${l}</span><span class="dv">${v}</span></div>`).join('');
+
+// ── Relógio ───────────────────────────────────────────────────────
+(function tick(){
+  const n=new Date();
+  $('clock').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+  setTimeout(tick,1000);
+})();
+
+// ── Chart.js base ─────────────────────────────────────────────────
+function chartOpts(yLabel, yMax) {
+  const o = {
+    responsive:true, maintainAspectRatio:false, animation:{duration:350},
+    plugins:{ legend:{display:false}, tooltip:{
+      backgroundColor:'rgba(10,12,22,0.92)',
+      titleFont:{family:'IBM Plex Mono',size:10}, bodyFont:{family:'IBM Plex Mono',size:10},
+      padding:8, borderColor:'rgba(255,255,255,0.08)', borderWidth:1
+    }},
+    scales:{
+      x:{ ticks:{font:{size:9,family:'IBM Plex Mono'},color:'#7a7f9a',maxTicksLimit:8},
+          grid:{display:false}, border:{display:false} },
+      y:{ min:0, ticks:{font:{size:9,family:'IBM Plex Mono'},color:'#7a7f9a',callback:v=>v+yLabel},
+          grid:{color:'rgba(255,255,255,0.04)'}, border:{display:false} }
+    }
+  };
+  if (yMax!==undefined) o.scales.y.max=yMax;
+  return o;
+}
+
+const cpuChart = new Chart($('cpuChart'),{ type:'line', data:{ labels:mkLabels(24), datasets:[
+  {label:'CPU %',data:[],borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.1)',borderWidth:1.5,tension:0.4,pointRadius:0,fill:true},
+  {label:'Aviso',data:Array(24).fill(80),borderColor:'#EF9F27',borderWidth:1,borderDash:[4,3],pointRadius:0}
+]}, options:chartOpts('%',100) });
+
+const ramChart = new Chart($('ramChart'),{ type:'line', data:{ labels:mkLabels(24), datasets:[
+  {label:'RAM %',data:[],borderColor:'#9F77DD',backgroundColor:'rgba(159,119,221,0.1)',borderWidth:1.5,tension:0.4,pointRadius:0,fill:true},
+  {label:'Crítico',data:Array(24).fill(90),borderColor:'#E24B4A',borderWidth:1,borderDash:[4,3],pointRadius:0}
+]}, options:chartOpts('%',100) });
+
+const latChart = new Chart($('latChart'),{ type:'line', data:{ labels:mkLabels(24), datasets:[
+  {label:'Latência ms',data:[],borderColor:'#22D3EE',backgroundColor:'rgba(34,211,238,0.08)',borderWidth:1.5,tension:0.4,pointRadius:2,pointBackgroundColor:'#22D3EE',fill:true},
+  {label:'Aviso',data:Array(24).fill(80),borderColor:'#EF9F27',borderWidth:1,borderDash:[4,3],pointRadius:0}
+]}, options:chartOpts(' ms') });
+
+const jitChart = new Chart($('jitChart'),{ type:'line', data:{ labels:mkLabels(24), datasets:[
+  {label:'Jitter ms',data:[],borderColor:'#F472B6',backgroundColor:'rgba(244,114,182,0.08)',borderWidth:1.5,tension:0.3,pointRadius:2,pointBackgroundColor:'#F472B6',fill:true},
+  {label:'Crítico',data:Array(24).fill(20),borderColor:'#E24B4A',borderWidth:1,borderDash:[4,3],pointRadius:0}
+]}, options:chartOpts(' ms') });
+
+const netChart = new Chart($('netChart'),{ type:'bar', data:{ labels:mkLabels(24), datasets:[
+  {label:'Entrada',data:[],backgroundColor:'rgba(24,95,165,0.7)',borderRadius:2,borderSkipped:false},
+  {label:'Saída',  data:[],backgroundColor:'rgba(29,158,117,0.65)',borderRadius:2,borderSkipped:false}
+]}, options:chartOpts(' Gbps') });
+
+function syncChart(chart, labels, ...pairs) {
+  chart.data.labels = labels;
+  pairs.forEach(([idx,data,fixed]) => {
+    chart.data.datasets[idx].data = fixed!==undefined ? Array(labels.length).fill(fixed) : data;
+  });
+  chart.update();
+}
+
+// ── Fetch principal ───────────────────────────────────────────────
+async function fetchMetrics() {
+  try {
+    const res = await fetch(API, {cache:'no-store'});
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const d = await res.json();
+
+    $('error-box').style.display = 'none';
+    $('status-pill').classList.remove('err');
+    $('status-text').textContent = 'todos os sistemas operacionais';
+    $('last-update').textContent = 'atualizado às '+d.timestamp;
+    $('ping-host-label').textContent = d.rede.host_ping||'8.8.8.8';
+
+    // CPU
+    setVal('v-cpu', d.cpu.uso_pct+'<span class="kpi-unit">%</span>');
+    setVal('s-cpu', d.cpu.nucleos_fis+' fís · '+d.cpu.nucleos+' lóg · '+(d.cpu.frequencia||'--')+' MHz');
+    setBar('b-cpu', d.cpu.uso_pct, barColor(d.cpu.uso_pct));
+
+    // RAM
+    setVal('v-ram', d.ram.uso_pct+'<span class="kpi-unit">%</span>');
+    setVal('s-ram', d.ram.usado_gb+' GB / '+d.ram.total_gb+' GB');
+    setBar('b-ram', d.ram.uso_pct, barColor(d.ram.uso_pct));
+
+    // Disco
+    setVal('v-disk', d.disco.uso_pct+'<span class="kpi-unit">%</span>');
+    setVal('s-disk', d.disco.usado_gb+' GB / '+d.disco.total_gb+' GB');
+    setBar('b-disk', d.disco.uso_pct, barColor(d.disco.uso_pct));
+
+    // Uptime
+    const h=d.uptime_horas;
+    setVal('v-up', h>=24?(h/24).toFixed(1)+'<span class="kpi-unit">d</span>':h+'<span class="kpi-unit">h</span>');
+    setVal('s-up','sistema ativo');
+
+    // Rede
+    setVal('v-ni', d.rede.entrada_gbps.toFixed(4)+'<span class="kpi-unit">Gbps</span>');
+    setVal('s-ni','pkts recv: '+d.rede.pacotes_in.toLocaleString('pt-BR'));
+    setBar('b-ni', d.rede.entrada_gbps*1000,'#185FA5');
+    setVal('v-no', d.rede.saida_gbps.toFixed(4)+'<span class="kpi-unit">Gbps</span>');
+    setVal('s-no','pkts sent: '+d.rede.pacotes_out.toLocaleString('pt-BR'));
+    setBar('b-no', d.rede.saida_gbps*1000,'#1D9E75');
+
+    // Latência
+    const lat=d.latencia;
+    if (lat.atual_ms!==null) {
+      setVal('v-lat', lat.atual_ms+'<span class="kpi-unit">ms</span>'+qualityBadge(lat.atual_ms));
+      setVal('s-lat','média: '+lat.media_ms+' ms · '+lat.amostras+' amostras');
+      setBar('b-lat', Math.min(lat.atual_ms/3,100), latColor(lat.atual_ms));
+      setVal('v-lat-mm', lat.min_ms+'<span class="kpi-unit">ms</span>');
+      setVal('s-lat-mm','máx: '+lat.max_ms+' ms · '+lat.amostras+' amostras');
+      setBar('b-lat-mm', lat.max_ms?(lat.min_ms/lat.max_ms)*100:0, latColor(lat.max_ms));
+    } else {
+      setVal('v-lat','--<span class="kpi-unit">ms</span>');
+      setVal('s-lat','coletando pings...');
+    }
+
+    // Jitter
+    const jit=d.jitter;
+    if (jit.atual_ms!==null) {
+      setVal('v-jit', jit.atual_ms+'<span class="kpi-unit">ms</span>');
+      setVal('s-jit','média: '+jit.media_ms+' ms · '+jit.amostras+' amostras');
+      setBar('b-jit', Math.min(jit.atual_ms/0.5,100), jitColor(jit.atual_ms));
+      setVal('v-jit-mm', jit.media_ms+'<span class="kpi-unit">ms</span>');
+      setVal('s-jit-mm','máx: '+jit.max_ms+' ms');
+      setBar('b-jit-mm', jit.max_ms?(jit.media_ms/jit.max_ms)*100:0, jitColor(jit.max_ms));
+    } else {
+      setVal('v-jit','--<span class="kpi-unit">ms</span>');
+      setVal('s-jit','coletando pings...');
+    }
+
+    // Gráficos
+    const hi=d.historico;
+    syncChart(cpuChart, mkLabels(hi.cpu.length),   [0,hi.cpu],[1,null,80]);
+    syncChart(ramChart, mkLabels(hi.ram.length),   [0,hi.ram],[1,null,90]);
+    syncChart(latChart, mkLabels(hi.latency.length),[0,hi.latency],[1,null,80]);
+    syncChart(jitChart, mkLabels(hi.jitter.length), [0,hi.jitter],[1,null,20]);
+    $('lat-samples').textContent = hi.latency.length;
+    netChart.data.labels=mkLabels(hi.net_in.length);
+    netChart.data.datasets[0].data=hi.net_in;
+    netChart.data.datasets[1].data=hi.net_out;
+    netChart.update();
+
+    // Detalhes
+    $('disk-details').innerHTML = detailRows([
+      ['Total', d.disco.total_gb+' GB'], ['Usado', d.disco.usado_gb+' GB'],
+      ['Livre', d.disco.livre_gb+' GB'], ['Uso',   d.disco.uso_pct+'%'],
+    ]);
+    $('net-details').innerHTML = detailRows([
+      ['Pkts recebidos', d.rede.pacotes_in.toLocaleString('pt-BR')],
+      ['Pkts enviados',  d.rede.pacotes_out.toLocaleString('pt-BR')],
+      ['Erros entrada',  d.rede.erros_in],
+      ['Erros saída',    d.rede.erros_out],
+      ['Host ping',      d.rede.host_ping],
+    ]);
+    $('proc-body').innerHTML = d.processos_top.map(p=>
+      `<tr><td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nome}</td>
+       <td>${p.cpu}%</td><td style="text-align:right">${p.ram}%</td></tr>`
+    ).join('');
+
+  } catch(e) {
+    $('error-box').style.display='block';
+    $('status-pill').classList.add('err');
+    $('status-text').textContent='sem conexão com a API';
+  }
+}
+
+fetchMetrics();
+setInterval(fetchMetrics, INTERVAL);
+</script>
+</body>
+</html>
